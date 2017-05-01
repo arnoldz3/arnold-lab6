@@ -1,0 +1,66 @@
+// ***********************************************************************************************
+// 
+//       filename:  arnold-lab6-writeup.txt
+// 
+//    description:  Explains the process used to solve each part of Lab 6's requirements.
+// 
+//         author:  Arnold, Zackery
+// 
+//          class:  CPS 473
+//     instructor:  Deep
+//     assignment:  Lab 6
+// 
+//       assigned:  April 10, 2017
+//            due:  May 1, 2017
+// 
+// ***********************************************************************************************
+
+
+// Requirement #1: Changes the message displayed on an illegal move to “Not in this game.”
+
+When I first looked at this executable in IDA I found that the InvalideMove box was called at
+address 0x01003C0A. I noted that a buffer, saved in the data section, was used to set the
+text. I soon found that this buffer was constantly being overwritten by the application, solve
+simply writing a value in that address space would be insufficient.
+
+Following a hint from Brian after class on 4/24/2017, I realized that the RESOURCE portion of a 
+Windows PE executable is simply not detected in this version of IDA free. Using PESTUDIO, I
+eventually deduced that I could find the Unicode string with a hex editor at raw offset 0xD404.
+
+Using this offset, the virtual address of the string could be solved with the following formula:
+
+(target raw offset) - (raw offset of section) + (virtual address of section) + (image base)
+= (target virtual address)
+
+Using that, I found the virtual address at 0x01010C04. I then used the DLL to patch this address
+for the correct number of bytes to overwrite the string that was once there.
+
+
+// Requirement #2: Sets the total won to 1000 as shown by the Game->Statistics dialog
+
+As before, I found that the total won string was loaded from a resource table. This string, however,
+used formatting to place the correct integer value into the display. Upon further searching through
+the database I came to the conclusion that the values must have been loaded from the Windows Registry
+entry for FreeCell. With a lot of debugging I eventually found a way to update the FreeCell registry
+entries with specified bytes that would draw 1000 to the screen. One interesting note: the path to 
+the registry entry was originally detected as a function by IDA. This had to be converted to characters
+before I could determine where the FreeCell entries were stored.
+
+
+// Requirement #3: The next valid move wins the game.
+
+I was originally looking at the _bWonState flags for this solution. Eventually I got the bright idea
+to look at the code around the cheat menu. I saw that on one path the cheat flag was set to 0x2. Initially,
+I thought this was a boolean value, so I spent a long time looking for other solutions before realizing that
+this could work to my advantage. The final solution simply sets this flag to 2 so that the next play performs
+just like the cheat code.
+
+// Requirement #4: Change keyboard shortcut to CTRL+SHIFT+F6
+
+// Requirement #5: CTRL+SHIFT+F2 wins the game.
+
+Haven't been able to figure this one out yet because it also relies on a solution to the previous keyboard
+input problem. However, I do have a function that can automatically win the game, which can be called
+when the hacker is prompted with a Ok|Cancel message box.
+
+

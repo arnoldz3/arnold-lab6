@@ -1,0 +1,172 @@
+
+unicode string not in this game
+memcpy
+find it within the resource section.
+
+
+---------------
+-- 4/15/2017 --
+---------------
+
+0x0000d404
+
+The invalid move dialog is presented at address 0x01003C0A.
+lpText is the text string in the dialog box.
+Need to find a way to change this to say "not in this game."
+
+INCORRECT Assumption: The invalid move text string is located at address 0x01007880
+
+The buffer, which is loaded from the exes String Resource file, is at 0x01007880.
+The "That move is not allowed" string is in this resource file with ID# 306 (0x132).
+I have successfully set the value of the buffer, but it gets reset whenever the program
+loads from the string table. I need to find a way to set the value at the right part
+of the given function, or else modify the string table?
+
+---------------
+-- 4/29/2017 --
+---------------
+
+!!!!!!!!!!!!
+!! SOLVED !!
+!!!!!!!!!!!!
+
+Modifying the string table was the correct choice.
+The string table is loaded in the resource section of the executable.
+IDA Free cannot see this section, so I had to consult a hex editor.
+Using the editor I saw that the string was stored at offset 0xD404.
+I first thought that meant I would have to edit Virtual Address 0x0100D404.
+But apparently, I needed to use this following calculation:
+
+(target raw offset) - (raw offset of section) + (virtual address of section) + (image base)
+= (target virtual address)
+
+Doing so, I got address 0x01010C04. Loading that as a unicode string shows
+many of the strings I was looking for. Replacing the first 36 bytes with
+my own does the job just fine.
+
+Solution is in 
+
+# 2 -- Set total won to 1000 in the Game -> Statistics dialog
+
+Total won string is stored in a string table. Loaded from resource file.
+The proper string format is:
+320	Total				%u%%\n	won:		%u \n	lost:		%u%\n\n
+
+'%u' is an unsigned integer. So it must be loaded from somewhere.
+320 is the refference. In hex, this is 140. Look for 140h.
+140h is loaded at 0x01002923.
+
+I set the variables there to numPlayed, numWins, numLosses. These values are
+loaded further up at 0x010027F7, roughly. Not sure where the value comes from.
+Appears to be loaded from some similar resource. Need to modify this value during runtime.
+
+---------------
+-- 4/29/2017 --
+---------------
+
+"won:\t\t%u" value loaded at 0x01001771
+
+GetPrivateProfileIntW
+
+Looking deeper, I see that the value for freecell is stored in the registry.
+HKEY_CURRENT_USER\\PROGRAMS\\Microsoft\\Windows\\CurrentVersion\\Applets\\Freecell
+"won" is the one we need. To set "won" to 1000, need to set registry key to 1000.
+REGEDIT can be used to demo, value is byte ordered as 0xE8030000 (0x3E8 in Big Endian format)
+
+I believe I have accessed the registry key in the dll.
+
+
+
+# 3 -- Next valid move wins the game.
+
+game # 31882
+_bCheating 0x01007130
+
+0x01008320 _bWonState
+0x01007800 _wCardCount
+
+.data:010079A4 _hkey dd 1D8h
+
+YouWinDLG Function called at 0x01005186
+This is within the MoveCards Function.
+Also sets 'WonState' variable bool to true. This must be the place where
+victory is assigned. IsGameLost is also used nearby.
+It looks like if there are more than 0 cards remaining in play then the
+game checks IfGameLost() to see if the user can continue playing.
+If the number of cards is equal to zero then they win.
+Should focus on setting the number of cards variable to zero, most likely.
+Comparison occurs at 0x01005097
+
+# 4 -- Your DLL should change this cheat-code sequence to Ctrl - Shift – F6.
+
+Original Cheat Message Box occurs at 0x010020C8.
+switch statement leads to that position.
+switch statement works by multiplying eax by 4 to get the offset in the switch.
+our branch is the i = 13 position, so eax = 4 * 13.
+
+before switch, eax is added to 0xFFFFFF9B.
+I think this means that the EAX value, added to this, wraps around from the max
+int range for unsigned decimals to a value between 0 and 14. 
+0xFFFFFF9B = 4,294,967,195
+0xFFFFFFFF = 4,294,967,295
+
+  0xFFFFFFFF
+- 0xFFFFFF9B
+------------
+  0x00000064 = 100, duh...
+  
+Soo eax needs to be 100+13 = 113, = 0x71.
+
+  0x00000071
++ 0xFFFFFF9B
+------------
+  0x0000000D
+  
+eax is assigned a value from wParam, a MainWindowProc argument, and we are in MainWindowProc.
+This is a callback function.
+wParam is a specific message for the callback. Likely from the successful keyboard input.
+
+http://stackoverflow.com/questions/931257/how-can-i-find-the-data-structure-that-represents-mine-layout-of-minesweeper-in
+
+This example talks about keyboard inputs as "accelerator" commands. Will research this.
+
+https://msdn.microsoft.com/en-us/library/ms646337(VS.85).aspx#wm_command
+
+VK_SHIFT, VK_CONTROL, VK_F10 are needed. example:
+
+               v don't know the number here
+VK_F6, ID_ACCEL#, CONTROL, SHIFT, VIRTKEY ; CTRL+SHIFT+F6
+
+LoadAccelerators function is used to bring these up.
+
+WM_COMMAND flag is used to check commands. This is 0x111, which is checked just before the switch statement.
+That means the value of uID is 0x111 for the WM_COMMAND Message whenever a keyboard stroke or similar command is issued.
+If that is the case, then the switch statement will be reached. wParam is then used to determine the case.
+
+I used a program called 'Resource Hacker' to look at Freecell.exe -- it suggests that the correct accelerator used by the
+program is as follows:
+
+VK_F10, 114, CONTROL, SHIFT, VIRTKEY
+
+114 may be the value instead of 113.
+
+I need to find a way to modify this accelerator entry to accept CTRL+SHIFT+VK_F6 instead of VK_F10.
+
+
+#5 -- CTRL+SHIFT+F2 Wins the game
+
+I know that these events are handled by the switch, as described above. If I can add a new entry for 
+CTRL+SHIFT+F2 and use it to call my own function, which calls the function for winning the game, then all is well.
+
+0x01008320 _bWonState
+
+
+
+4/27/2017
+
+FREEMENU accelerator is loaded at address 0x0100225F
+I know how to make a new accelerator with the necessary values.
+I do not know how to point the original accelerator to this one.
+
+
+
