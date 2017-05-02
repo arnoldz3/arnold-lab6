@@ -57,10 +57,14 @@ just like the cheat code.
 
 // Requirement #4: Change keyboard shortcut to CTRL+SHIFT+F6
 
+This took a LOT of trial and error. I absolutely could not simply overwrite the accelerator table from my
+DLL. To solve for this I looked into windows hooks. I eventually decided to hook the WH_GETMESSAGE events
+with my own function. This worked if I had a GetMessage() call within the same thread. Ultimately,
+I could use my own TranslateAccelerator with the new FreeMenu instance.
+
 // Requirement #5: CTRL+SHIFT+F2 wins the game.
 
-Haven't been able to figure this one out yet because it also relies on a solution to the previous keyboard
-input problem. However, I do have a function that can automatically win the game, which can be called
-when the hacker is prompted with a Ok|Cancel message box.
+Got the previous keyboard problem solved but I didn't find a way to set a new input for a new function.
+Will look into this.
 
 

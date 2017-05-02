@@ -37,6 +37,7 @@ void nextMoveWins();
 void wins1000();
 void notInThisGame();
 void APIENTRY foo(void);
+BOOL InstallHook();
 
 
 BOOL APIENTRY DllMain(HMODULE hModule,
@@ -60,8 +61,21 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 		// Part 3 Solution
 		nextMoveWins();
 
+		//while (1) {
+		//	OutputDebugStringA("Inside Loop.");
+		//	if ((GetKeyState(VK_SPACE) & 0x8000)) {// & GetKeyState(VK_CONTROL) & GetKeyState(VK_F6)) & 0x8000) {
+		//		OutputDebugStringA("Keys Caught");
+		//		autoWin();
+		//	}
+		//	Sleep(100);
+		//}
 		// Part 4 Soon Solution
 		newAccelerators(hModule);
+
+		if (InstallHook())
+			OutputDebugStringA("Failed to set hook.");
+
+		/*CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InstallHook, (void*)NULL, 0, NULL);*/
 
 		// Part 5 Partial Solution
 		promptAutoWin();
@@ -86,7 +100,7 @@ void notInThisGame() {
 	wchar_t wbuf[1000];
 	// Get the base address of the program.
 	DWORD start = (DWORD)GetModuleHandle(NULL);
-	DWORD offset = (DWORD)0x00010C04;//0x0000D404;//0x00007880;//0x0000D404;
+	DWORD offset = (DWORD)0x00010C04;
 	DWORD address = offset + start;
 
 	sprintf_s(buf, 200, "Base is %X\n", start);
@@ -300,6 +314,83 @@ void promptAutoWin() {
 	}
 }
 
+// Global Variables for the hooking procedure.
+HHOOK hkb;
+HACCEL newFreeMenu;
+HACCEL origFreeMenu;
+
+/* This hook callback function is used whenever a new message is received.
+   The custom accelerator is used to translate those messages.
+*/
+LRESULT CALLBACK HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	char buf[200];
+
+	LPMSG lMsg = (LPMSG)lParam;
+	//HWND hWnd = FindMyTopMostWindow();
+	HWND hWnd;
+	hWnd = *(HWND *)0x01008374;
+
+	if ()
+
+	// Using Custom Accellerator Table Here.
+	if (TranslateAccelerator(hWnd, newFreeMenu, lMsg) == 0)
+	{
+		TranslateMessage(lMsg);
+		DispatchMessage(lMsg);
+	}
+	else {
+		OutputDebugStringA("TranslateMessage Passed");
+	}
+
+	// call the next hook in the hook chain. This is nessecary or your hook chain will break and the hook stops
+	return CallNextHookEx(hkb, nCode, wParam, lParam);
+}
+
+/* This function installs a hook to the WH_GETMESSAGE events.
+   For some reason, my own GetMessage() function needs to be
+   running for this thread to be able to intercept the messages.
+   Whatever...
+*/
+BOOL InstallHook()
+{
+
+	char buf[200];
+
+	OutputDebugStringA("Attempting to Install Hook");
+	HWND hWnd = FindMyTopMostWindow();
+
+	DWORD dwProcID = GetCurrentProcessId();
+	sprintf_s(buf, "dwProcID = %x", dwProcID);
+	OutputDebugStringA(buf);
+
+	DWORD dwThreadID = GetWindowThreadProcessId(hWnd, &dwProcID);
+	sprintf_s(buf, "dwThreadID = %x", dwThreadID);
+	OutputDebugStringA(buf);
+
+
+	HWND pgmHwnd;
+	pgmHwnd = *(HWND *)0x01008374;
+	sprintf_s(buf, "pgnHwnd = %x", pgmHwnd);
+	OutputDebugStringA(buf);
+	sprintf_s(buf, "myHwnd = %x", hWnd);
+	OutputDebugStringA(buf);
+
+	hkb = SetWindowsHookEx(WH_GETMESSAGE, (HOOKPROC)HookCallback, NULL, dwThreadID);
+
+	OutputDebugStringA("Potentially Installed Hook");
+
+	MSG msg;
+	BOOL bRet;
+
+	while (bRet = GetMessage(&msg, NULL, 0, 0));
+
+	OutputDebugStringA("On the Other side.");
+	if (hkb == NULL)
+		return FALSE;
+	else
+		return TRUE;
+}
 
 /* Here lies my attempt to find a solution to the keyboard accelerator problem.
    I made my own accelerator within the freecell-dll.rc file in this solution,
@@ -309,252 +400,46 @@ void promptAutoWin() {
 void newAccelerators(HMODULE self) {
 
 	bool tableDestroyed;
-
 	char buf[200];
 	ZeroMemory(buf, 10);
 
-	HACCEL newFreeMenu = LoadAccelerators(self, L"FreeMenu");
+	origFreeMenu = LoadAccelerators(NULL, L"FreeMenu");
+	if (origFreeMenu != NULL) {
+		OutputDebugStringA("Success Loading origFreeMenu");
+		sprintf_s(buf, 200, "Handle points to 0x%X\n", origFreeMenu);
+		OutputDebugStringA(buf);
+
+		OutputDebugStringA("Trying to Destroy the Original Table");
+
+		//MSDN NOTES:
+		//
+		//If the function succeeds, the return value is nonzero. 
+		//However, if the table has been loaded more than one call to LoadAccelerators, 
+		//the function will return a nonzero value only when DestroyAcceleratorTable 
+		//has been called an equal number of times.
+		//
+		//This was called once in the FreeCell app, and once above. So call it twice.
+
+		DestroyAcceleratorTable(origFreeMenu);
+		if (DestroyAcceleratorTable(origFreeMenu))
+		{
+			OutputDebugStringA("Successfully destroyed original table.");
+			tableDestroyed = true;
+		}
+	}
+	else
+	{
+		OutputDebugStringA("Failed to load origFreeMenu");
+		DWORD error = GetLastError();
+		sprintf_s(buf, 200, "Error is %d\n", error);
+		OutputDebugStringA(buf);
+	}
+
+	newFreeMenu = LoadAccelerators(self, L"FreeMenu");
 	if (newFreeMenu != NULL) {
 		OutputDebugStringA("Success Loading newFreeMenu");
 		sprintf_s(buf, 200, "Handle points to 0x%X\n", newFreeMenu);
 		OutputDebugStringA(buf);
-
-
-		//HWND hwndMain = FindMyTopMostWindow();
-		//HWND hwndDlgModeless = NULL;
-		//MSG msg;
-		//BOOL bRet;
-		//// 
-		//// Perform initialization and create a main window. 
-		//// 
-
-		//char buf[200];
-		//sprintf_s(buf, 200, "HWND = %X\n", hwndMain);
-		//OutputDebugStringA(buf);
-
-		//OutputDebugStringA("Attempting to create custom message loop.");
-		//while ((bRet = GetMessage(&msg, hwndMain, 0, 0)) != 0)
-		//{
-		//	OutputDebugStringA("Looping.");
-		//	if (bRet == -1)
-		//	{
-		//		// handle the error and possibly exit
-		//		sprintf_s(buf, 200, "Error = %X\n", bRet);
-		//		OutputDebugStringA(buf);
-		//	}
-		//	else
-		//	{
-		//		if (hwndDlgModeless == (HWND)NULL ||
-		//			!IsDialogMessage(hwndDlgModeless, &msg) &&
-		//			!TranslateAccelerator(hwndMain, newFreeMenu,
-		//				&msg))
-		//		{
-
-		//			sprintf_s(buf, 200, "Attempting to translate msg 0x%X", msg);
-		//			OutputDebugStringA(buf);
-
-		//			TranslateMessage(&msg);
-		//			DispatchMessage(&msg);
-		//		}
-		//	}
-		//}
-		//OutputDebugStringA("bRet became 0.");
 	}
+
 }
-
-
-
-
-
-
-//sprintf_s(buf, 200, "iResult is %d\n", iResult);
-//OutputDebugStringA(buf);
-//HACCEL origFREEMENU = LoadAccelerators(self, L"FREEMENU");
-
-
-//SendMessage(HWND_BROADCAST, 0x77, 0, 0);
-
-//HACCEL newFreeMenu = LoadAccelerators(self, L"FreeMenu");
-//if (newFreeMenu != NULL) {
-//	OutputDebugStringA("Success Loading newFreeMenu");
-//	sprintf_s(buf, 200, "Handle points to 0x%X\n", newFreeMenu);
-//	OutputDebugStringA(buf);
-
-//	int cCopied = CopyAcceleratorTable(newFreeMenu, NULL, NULL);
-//	if (cCopied == 0)
-//	{
-//		OutputDebugStringA("Could not copy original table.");
-//	}
-//	else
-//	{
-//		sprintf_s(buf, 200, "Copied %d\n", cCopied);
-//		OutputDebugStringA(buf);
-
-//		LPACCEL tempFreeMenu = (LPACCEL)LocalAlloc(LPTR, cCopied * sizeof(ACCEL));
-//		
-//		if (tempFreeMenu == NULL)
-//		{
-//			OutputDebugStringA("Could not allocate new table.");
-//		}
-//		CopyAcceleratorTable(newFreeMenu, tempFreeMenu, cCopied);
-//		for (int i = 0; i < (UINT)cCopied; i++)
-//		{
-//			if (tempFreeMenu[i].cmd == (WORD)114)
-//			{
-//				OutputDebugStringA("Found Entry 114.");
-//				sprintf_s(buf, 200, "Key Hex Value is 0x%X\n", tempFreeMenu[i].key);
-//				OutputDebugStringA(buf);
-//				//tempFreeMenu[i].fVirt = FVIRTKEY | FSHIFT | FCONTROL;
-//				//tempFreeMenu[i].key = VK_F8;
-//			}
-//		}
-//	}
-//}
-//else
-//{
-//	OutputDebugStringA("Failed");
-//	DWORD error = GetLastError();
-//	sprintf_s(buf, 200, "Error is %d\n", error);
-//	OutputDebugStringA(buf);
-//}
-
-
-
-//HACCEL origFreeMenu = LoadAccelerators(NULL, L"FreeMenu");
-//if (origFreeMenu != NULL) {
-//	OutputDebugStringA("Success Loading origFreeMenu");
-//	sprintf_s(buf, 200, "Handle points to 0x%X\n", origFreeMenu);
-//	OutputDebugStringA(buf);
-
-//	OutputDebugStringA("Trying to Destroy the Original Table");
-
-//	//MSDN NOTES:
-//	//
-//	//If the function succeeds, the return value is nonzero. 
-//	//However, if the table has been loaded more than one call to LoadAccelerators, 
-//	//the function will return a nonzero value only when DestroyAcceleratorTable 
-//	//has been called an equal number of times.
-//	//
-//	//This was called once in the FreeCell app, and once above. So call it twice.
-
-//	DestroyAcceleratorTable(origFreeMenu);
-//	if (DestroyAcceleratorTable(origFreeMenu))
-//	{
-//		OutputDebugStringA("Successfully destroyed original table.");
-//		tableDestroyed = true;
-//	}
-//}
-//else
-//{
-//	OutputDebugStringA("Failed to load origFreeMenu");
-//	DWORD error = GetLastError();
-//	sprintf_s(buf, 200, "Error is %d\n", error);
-//	OutputDebugStringA(buf);
-//}
-//
-//
-//	//LPACCEL *table = (LPACCEL*)origFreeMenu;
-//
-//	//sprintf_s(buf, 200, "Error is %d\n", *table);
-//	//OutputDebugStringA(buf);
-//	//for (int i = 0; i < (UINT)8; i++)
-//	//{
-//	//	OutputDebugStringA("In Loop.");
-//	//	if ((*table)[i].cmd == (WORD)114)
-//	//	{
-//	//		OutputDebugStringA("Found Entry 114.");
-//	//		(*table)[i].fVirt = FVIRTKEY | FSHIFT | FCONTROL;
-//	//		(*table)[i].key = VK_F8;
-//	//	}
-//	//}
-//
-//	//HACCEL newFreeMenu = LoadAccelerators(self, L"FreeMenu");
-//	//if (newFreeMenu != NULL) {
-//	//	OutputDebugStringA("Success Loading newFreeMenu");
-//	//	sprintf_s(buf, 200, "Handle points to 0x%X\n", newFreeMenu);
-//	//	OutputDebugStringA(buf);
-//	//}
-//	//else
-//	//{
-//	//	OutputDebugStringA("Failed");
-//	//	DWORD error = GetLastError();
-//	//	sprintf_s(buf, 200, "Error is %d\n", error);
-//	//	OutputDebugStringA(buf);
-//	//}
-//
-//	//LPMSG msg = (LPMSG)(unsigned int)114;
-//	//int a = TranslateAccelerator(NULL, newFreeMenu, msg);
-//	//if (a == NULL) {
-//	//	DWORD err = GetLastError();
-//	//	sprintf_s(buf, 200, "Translate Returns %d\n", err);
-//	//	OutputDebugStringA(buf);
-//	//}
-//	//else
-//	//{
-//	//	sprintf_s(buf, 200, "Translate Returns %d\n", a);
-//	//	OutputDebugStringA(buf);
-//	//}
-//	//OutputDebugStringA("Attempting to overwrite old handle.");
-//	//int cCopied = CopyAcceleratorTable(newFreeMenu, (LPACCEL)origFreeMenu, 8);
-//	//if (cCopied == 0)
-//	//{
-//	//	OutputDebugStringA("Could not copy original table.");
-//	//}
-//	//else
-//	//{
-//	//	sprintf_s(buf, 200, "Copied %d\n", cCopied);
-//	//	OutputDebugStringA(buf);
-//	//}
-//
-//	//if (tableDestroyed)
-//	//{
-//	//	// This should work because separate thread?
-//	//	OutputDebugStringA("Attempting to use new table in msg loop.");
-//	//	MSG msg;
-//	//	while (GetMessage(&msg, NULL, 0, 0))
-//	//	{
-//	//		OutputDebugStringA("Loop Running.");
-//	//		if (!TranslateAccelerator(NULL, newFreeMenu, &msg))
-//	//		{
-//	//			TranslateMessage(&msg);
-//	//			DispatchMessage(&msg);
-//	//		}
-//	//	}
-//	//}
-//	//OutputDebugStringA("Creating New Table");
-//
-//	//int cCopiedEntries = CopyAcceleratorTable(origFREEMENU, NULL, 0);
-//	//if (cCopiedEntries == 0)
-//	//{
-//	//	OutputDebugStringA("Could not copy original table.");
-//	//}
-//
-//	//LPACCEL newFREEMENU = (LPACCEL)LocalAlloc(LPTR, cCopiedEntries * sizeof(ACCEL));
-//
-//	//if (newFREEMENU == NULL)
-//	//{
-//	//	OutputDebugStringA("Could not allocate new table.");
-//	//}
-//	//CopyAcceleratorTable(origFREEMENU, newFREEMENU, cCopiedEntries);
-//	//for (int i = 0; i < (UINT)cCopiedEntries; i++)
-//	//{
-//	//	if (newFREEMENU[i].cmd == (WORD)114)
-//	//	{
-//	//		OutputDebugStringA("Found Entry 114.");
-//	//		newFREEMENU[i].fVirt = FVIRTKEY | FSHIFT | FCONTROL;
-//	//		newFREEMENU[i].key = VK_F8;
-//	//	}
-//	//}
-//	//OutputDebugStringA("Changed table address value?");
-//	//HACCEL hNewFreeMenu = CreateAcceleratorTableW(newFREEMENU, cCopiedEntries);
-//	//OutputDebugStringA("Changed table address value?");
-//	//*origFREEMENU = *hNewFreeMenu;
-//	//OutputDebugStringA("Changed table address value?");
-//	////DestroyAcceleratorTable(origFREEMENU);
-//	////OutputDebugStringA("Destroyed original table.");
-//	////CopyAcceleratorTable(newFREEMENU, NULL, cCopiedEntries);
-//	////HACCEL FREEMENU = CreateAcceleratorTable(newFREEMENU, cCopiedEntries);
-//	///*OutputDebugStringA("Attempting to hook new table.");
-//	//TranslateAcceleratorW(NULL, FREEMENU, lpMsg);*/
-//
-//}
