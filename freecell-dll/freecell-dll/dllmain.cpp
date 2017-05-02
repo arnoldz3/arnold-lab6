@@ -331,7 +331,10 @@ LRESULT CALLBACK HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 	HWND hWnd;
 	hWnd = *(HWND *)0x01008374;
 
-	if ()
+	if (lMsg->message == (VK_SHIFT | VK_F2 | VK_CONTROL))
+	{
+		OutputDebugStringA("F2 Detected.");
+	}
 
 	// Using Custom Accellerator Table Here.
 	if (TranslateAccelerator(hWnd, newFreeMenu, lMsg) == 0)
@@ -340,6 +343,22 @@ LRESULT CALLBACK HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 		DispatchMessage(lMsg);
 	}
 	else {
+		sprintf_s(buf, "msg = %x", lMsg->message);
+		OutputDebugStringA(buf);
+
+		sprintf_s(buf, "lParam = %x", lMsg->lParam);
+		OutputDebugStringA(buf);
+
+
+		sprintf_s(buf, "wParam = %x", lMsg->wParam);
+		OutputDebugStringA(buf);
+
+		if (lMsg->lParam == 0x3c0001)
+		{
+			autoWin();
+			return 0;
+		}
+
 		OutputDebugStringA("TranslateMessage Passed");
 	}
 

@@ -67,4 +67,7 @@ I could use my own TranslateAccelerator with the new FreeMenu instance.
 Got the previous keyboard problem solved but I didn't find a way to set a new input for a new function.
 Will look into this.
 
+Found it by checking the LPARAM in the lMsg structure. Called autoWin() from in there. Program crashes
+but it does show up successfully before then. Does that count?
+
 
