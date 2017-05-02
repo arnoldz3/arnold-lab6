@@ -353,7 +353,7 @@ LRESULT CALLBACK HookCallback(int nCode, WPARAM wParam, LPARAM lParam)
 		sprintf_s(buf, "wParam = %x", lMsg->wParam);
 		OutputDebugStringA(buf);
 
-		if (lMsg->lParam == 0x3c0001)
+		if (lMsg->lParam == 0x3C0001)
 		{
 			autoWin();
 			return 0;
@@ -439,7 +439,7 @@ void newAccelerators(HMODULE self) {
 		//
 		//This was called once in the FreeCell app, and once above. So call it twice.
 
-		DestroyAcceleratorTable(origFreeMenu);
+		/*DestroyAcceleratorTable(origFreeMenu);*/
 		if (DestroyAcceleratorTable(origFreeMenu))
 		{
 			OutputDebugStringA("Successfully destroyed original table.");
